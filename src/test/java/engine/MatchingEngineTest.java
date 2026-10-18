@@ -64,4 +64,19 @@ public class MatchingEngineTest {
         assertEquals(10050L, engine.bestBid());   // what's left of the second bid
         assertNull(engine.bestAsk());           // seller fully filled
     }
+
+    @Test
+    void sellBelowAllBidsTradesAtEachRestingPrice() {
+        MatchingEngine engine = new MatchingEngine();
+        engine.submit(new Order(1, "AAPL", Side.BUY, 100, 10100));
+        engine.submit(new Order(2, "AAPL", Side.BUY, 500, 10050));
+
+        List<Trade> trades = engine.submit(new Order(3, "AAPL", Side.SELL, 300, 10000));
+
+        assertEquals(2, trades.size());
+        assertEquals(new Trade("AAPL", 100, 10100L), trades.getFirst());
+        assertEquals(new Trade("AAPL", 200, 10050L), trades.get(1));
+        assertEquals(10050L, engine.bestBid());   // 300 shares left at 100.50
+        assertNull(engine.bestAsk());             // seller fully filled, nothing rests
+    }
 }

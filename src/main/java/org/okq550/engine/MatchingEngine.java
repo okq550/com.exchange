@@ -28,6 +28,7 @@ public class MatchingEngine {
             }
 
             int tradeQty = Math.min(remaining, best.quantity());
+            // best.priceInCents() is the resting order price.
             trades.add(new Trade(order.symbol(), tradeQty, best.priceInCents()));
             remaining = remaining - tradeQty;
             if (tradeQty == best.quantity()) {
@@ -36,8 +37,6 @@ public class MatchingEngine {
                 book.reduceBest(order.side().opposite(), best.quantity() - tradeQty);
             }
         }
-
-        git remote set-url origin git@github.com-voucherry:voucherry-net/VOUCHERRY-2.0.git
 
         if (remaining > 0) {
             book.add(new Order(order.id(), order.symbol(), order.side(), remaining, order.priceInCents()));
@@ -57,10 +56,9 @@ public class MatchingEngine {
     // Do the incoming order's price and the resting order's price cross?
     private boolean crosses(Order incoming, Order resting) {
         // incoming BUY:  crosses if the resting ask's price is at or BELOW the buy's price
-        if(incoming.side() == Side.BUY) {
+        if (incoming.side() == Side.BUY) {
             return resting.priceInCents() <= incoming.priceInCents();
-        }
-        else {
+        } else {
             // incoming SELL: crosses if the resting bid's price is at or ABOVE the sell's price
             return resting.priceInCents() >= incoming.priceInCents();
         }

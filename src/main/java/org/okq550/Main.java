@@ -3,6 +3,13 @@ package org.okq550;
 import org.okq550.book.OrderBook;
 import org.okq550.domain.Order;
 import org.okq550.domain.Side;
+import org.okq550.domain.Trade;
+import org.okq550.engine.MatchingEngine;
+
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Scanner;
 // import org.okq550.domain.Side;
 // import org.okq550.domain.Trade;
 
@@ -14,36 +21,54 @@ import org.okq550.domain.Side;
 public class Main {
     public static void main(String[] args) {
 
-        Order OrderA = new Order(1, "AAPL", Side.BUY, 10, 10100);
-        Order OrderB = new Order(2, "AAPL", Side.BUY, 10, 10150);
-        Order OrderC = new Order(3, "AAPL", Side.SELL, 10, 10200);
-        Order OrderD = new Order(4, "AAPL", Side.SELL, 10, 10175);
+        Scanner in = new Scanner(System.in);
+        int counter = 1;
+        MatchingEngine engine = new MatchingEngine();
 
-//        List<Order> bids = new ArrayList<>();
-//        bids.add(a);
-//        bids.add(b);
-//        bids.add(c);
-//
-//        for(Order o : bids) {
-//            System.out.println(o);
-//        }
+        while(true) {
+            System.out.print("> ");
+            String line = in.nextLine();
 
-//        ArrayDeque<Order> queue = new ArrayDeque<>();
-//        queue.addLast(OrderA);
-//        queue.addLast(OrderB);
-//
-//        queue.peekFirst();
-//        queue.pollFirst();
+            if(line.equals("exit")) {
+                break;
+            }
 
-        OrderBook orderBook = new OrderBook();
-        orderBook.add(OrderA);
-        orderBook.add(OrderB);
-        orderBook.add(OrderC);
-        orderBook.add(OrderD);
-        orderBook.cancel(4);
+            try {
+                // BUY AAPL 100 101.25
+                String[] parts = line.split(" ");
+                if(parts.length != 4) {
+                    System.out.println("  rejected: expected SIDE SYMBOL QUANTITY PRICE, e.g. BUY AAPL 100 101.25");
+                    continue;
+                }
+                Side side = Side.valueOf(parts[0]);
+                String symbol = parts[1];
+                int quantity = Integer.parseInt(parts[2]);
+                long priceInCents = new BigDecimal(parts[3]).movePointRight(2).longValueExact();
+                Order order = new Order(counter, symbol, side, quantity, priceInCents);
+                List<Trade> trades = engine.submit(order);
 
-        System.out.println("Best bid: " + orderBook.bestBid());
-        System.out.println("Best ask: " + orderBook.bestAsk());
+                if(trades.isEmpty()) {
+                    System.out.println("No trades found");
+                }
+
+                for(Trade trade : trades) {
+                    System.out.println("  TRADE " + trade.quantity() + " " + trade.symbol() + " @ " + BigDecimal.valueOf(trade.priceInCents(), 2));
+                }
+                System.out.println("best bid: " + price(engine.bestBid()) + "  best ask: " + price(engine.bestAsk()));
+
+                counter++;
+            }
+            catch (Exception e) {
+                System.out.println("  rejected: " + e.getMessage());
+            }
+        }
+    }
+
+    static String price(Long cents) {
+        if(cents == null) {
+            return "-";
+        }
+        return BigDecimal.valueOf(cents, 2).toString();
     }
 
 }
