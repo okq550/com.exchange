@@ -5,25 +5,49 @@ import org.okq550.domain.Trade;
 import org.okq550.engine.MatchingEngine;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 
 public class Exchange {
-    private final BlockingQueue<Order> inbound = new ArrayBlockingQueue<>(100_000);
-    private final MatchingEngine matchingEngine = new MatchingEngine();
+
+    // A queued item: the order plus the box its result goes into
+    private record Request(Order order, CompletableFuture<List<Trade>> result) { }
+
+    private final BlockingQueue<Request> inbound = new ArrayBlockingQueue<>(10_000);
+    private final MatchingEngine engine = new MatchingEngine();
     private final Thread engineThread = new Thread(this::run, "engine");
-    private int tradeCount = 0;
-//    private final Thread engineThread = new Thread(() -> run());
+    private final List<BlockingQueue<String>> subscribers = new CopyOnWriteArrayList<>();
+
+    public void subscribe(BlockingQueue<String> mailbox) {
+        subscribers.add(mailbox);
+    }
+
+    public void unsubscribe(BlockingQueue<String> mailbox) {
+        subscribers.remove(mailbox);
+    }
+
+    public void publish(String message) {
+        for (BlockingQueue<String> mailbox : subscribers) {
+            if (!mailbox.offer(message)) {
+                System.out.println("Slow subscriber: message dropped");
+            }
+        }
+    }
 
     public void start() {
         engineThread.start();
     }
 
-    // Called by any number of trader threads.
-    public void submit(Order order) throws InterruptedException {
-        inbound.put(order);
+    // Called by any client thread. Returns a receipt that the engine fills in later.
+    public CompletableFuture<List<Trade>> submit(Order order) throws InterruptedException {
+        CompletableFuture<List<Trade>> result = new CompletableFuture<>();
+        inbound.put(new Request(order, result));
+        return result;
     }
 
     public boolean isIdle() {
@@ -34,23 +58,21 @@ public class Exchange {
         engineThread.interrupt();
     }
 
-    static String price(Long cents) {
-        if(cents == null) {
-            return "-";
-        }
-        return BigDecimal.valueOf(cents, 2).toString();
-    }
-
-    // Runs only in the engine thread: the single writer.
+    // Runs only on the engine thread: the single writer.
     private void run() {
         try {
-          while (true) {
-              Order order = inbound.take();
-              List<Trade> trades = matchingEngine.submit(order);
-              this.tradeCount += trades.size();
-          }
+            while (true) {
+                Request request = inbound.take();
+                List<Trade> trades = engine.submit(request.order());
+                request.result().complete(trades);
+
+                for(Trade trade : trades) {
+                    publish("MARKET TRADE " + trade.quantity() + " " + trade.symbol() + " @ " + trade.priceInCents());
+                }
+                publish("MARKET BEST bid=" + engine.bestBid() + " ask=" + engine.bestAsk());
+            }
         } catch (InterruptedException e) {
-            System.out.println("Engine stopped. Trades executed: " + tradeCount);
+            // stop() was called
         }
     }
 }
